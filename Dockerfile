@@ -31,7 +31,7 @@ RUN docker-php-ext-install gd
 RUN docker-php-ext-install sodium
 RUN docker-php-ext-install zip
 RUN curl -sS https://getcomposer.org/installer | \
-    php -- --install-dir=local/bin --filename=composer
+    php -- --install-dir= --filename=composer
 
 # Set new UID for user www-data
 RUN usermod -u 1000 www-data
