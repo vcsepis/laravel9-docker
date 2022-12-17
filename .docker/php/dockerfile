@@ -1,45 +1,61 @@
 FROM php:8.1-fpm
 
-ENV USER=www
-ENV GROUP=www
+WORKDIR /var/www
 
-# Install system dependencies
+# Add docker php ext repo
+ADD https://github.com/mlocati/docker-php-extension-installer/releases/latest/download/install-php-extensions /usr/local/bin/
+
+# Install php extensions
+RUN chmod +x /usr/local/bin/install-php-extensions && sync && \
+    install-php-extensions mbstring pdo_mysql zip exif pcntl gd memcached
+
+
+# Install dependencies
 RUN apt-get update && apt-get install -y \
+    build-essential \
+    mariadb-client \
+    libpng-dev \
+    libjpeg62-turbo-dev \
+    libfreetype6-dev \
+    libonig-dev \
+    locales \
+    libzip-dev \
+    zip \
+    jpegoptim optipng pngquant gifsicle \
+    vim \
+    unzip \
     git \
     curl \
-    libpng-dev \
-    libonig-dev \
-    libxml2-dev \
-    zip \
-    unzip
+    cron \
+    supervisor \
+    libsodium-dev \
+    pkg-config
+
+# Install supervisor
+RUN apt-get install -y supervisor
+
+# Install composer
+RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+
 
 # Clear cache
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Install PHP extensions
-RUN docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd
+# Install extensions & required packages
+RUN docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath zip
+RUN docker-php-ext-configure gd --with-freetype --with-jpeg
+RUN docker-php-ext-install gd
+RUN docker-php-ext-install sodium
+RUN docker-php-ext-install zip
+RUN curl -sS https://getcomposer.org/installer | \
+    php -- --install-dir=/usr/local/bin --filename=composer
 
-# Install Postgre PDO
-RUN apt-get update && apt-get install -y libpq-dev && docker-php-ext-install pdo pdo_pgsql
+# Set new UID for user www-data
+RUN usermod -u 1000 www-data
 
-# Get latest Composer
-COPY --from=composer:latest /usr/bin/composer /usr/local/bin/composer
+# Deployment steps
+RUN composer install --optimize-autoloader --no-dev
+RUN chmod +x /var/www/docker/run.sh
 
-# Setup working directory
-WORKDIR /var/www/
-
-# Create User and Group
-RUN groupadd -g 1000 ${GROUP} && useradd -u 1000 -ms /bin/bash -g ${GROUP} ${USER}
-
-# Grant Permissions
-RUN chown -R ${USER} /var/www
-
-# Select User
-USER ${USER}
-
-# Copy permission to selected user
-COPY --chown=${USER}:${GROUP} . .
-
-EXPOSE 9000
-
-CMD ["php-fpm"]
+EXPOSE 8080
+ENTRYPOINT ["/var/www/docker/run.sh"]
